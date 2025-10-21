@@ -184,7 +184,7 @@ def match_tccon_to_soundings(data, tccon_data):
     return data
 
 
-year = 2023
+year = 2022
 frac = 1 # fraction of data to load
 name_all = 'LiteFileExport_' + str(year) + '_'
 save_fig = True
@@ -218,9 +218,6 @@ unique_to_dir2 = files_in_dir2 - files_in_dir1
 
 print("Files unique to B11.2_OCO2 directory:", unique_to_dir1)
 print("Files unique to B11.2_ML directory:", unique_to_dir2)
-
-
-
 
 
 
@@ -334,131 +331,91 @@ print('Loading and matching TCCON data...')
 tccon_data = load_tccon_data()
 data = match_tccon_to_soundings(data, tccon_data)
 
-# calculate some stats *********************************************************
-# SA bias
-lat = data['latitude'].to_numpy()
-lon = data['longitude'].to_numpy()
-SA = np.zeros_like(lat)*np.nan
-SA_bias_b112 = np.zeros_like(lat)*np.nan
-XCO2b112 = data['xco2_ML'].to_numpy()
-SA_bias = np.zeros_like(lat) * np.nan
-XCO2 = data['xco2'].to_numpy()
-
-s=1
-i=0
-j = 1
-max_dist = 100 # in km
-while i+j < len(data):
-    j+=10
-    lats = lat[i:i+j]
-    lons = lon[i:i+j]
-    # calculate maximum distance
-    dist_max = dist(lats.max(), lats.min(), lons.max(), lons.min())
-    # check if SA is to big
-    if dist_max >= max_dist :
-        if j < 20: # if SA is too small we leave the nan value there
-            i = i + j
-            j = 0
-        else:
-            # assign SA
-            SA[i:i+j-10] = s + year * 10**8 # this should keep SAs unique across years
-
-            # calculate SA bias
-            SA_bias_b112[i:i+j-10] = XCO2b112[i:i+j-10] - np.median(XCO2b112[i:i+j-10])
-            SA_bias[i:i + j - 10] = XCO2[i:i + j - 10] - np.median(XCO2[i:i + j - 10])
-
-            s+=1
-            i = i+j-10
-            j=0
-            print(str(np.round(i/len(data)*100,3)) + '%')
 
 
 with open(save_path +str(year)+ '_ML_bias_correction_stats.txt', 'w') as f:
     n_total = len(data)
-    for qf in [0, 1, 2]:
-        f.write('Quality Flag: ' + str(qf) + '\n')
+    f.write('Total number of soundings: ' + str(n_total) + '\n')
+    f.write('=' * 50 + '\n')
+
+
+    for qf_version in ['xco2_quality_flag_ML', 'xco2_quality_flag']:
+        f.write('Quality Flag var Used: ' + str(qf_version) + '\n')
         f.write('=' * 50 + '\n')
         
+            
         # Define surface types to analyze
         surface_types = ['all', 'land', 'ocean']
         
         for surface in surface_types:
             f.write('\n--- ' + surface.title() + ' Surfaces ---\n')
-            
             # Filter data based on surface type
+
             if surface == 'all':
-                data_surface = data[data['xco2_quality_flag_ML'] == qf]
+                data_surface = data
             elif surface == 'land':
-                data_surface = data[(data['xco2_quality_flag_ML'] == qf) & (data['land_fraction'] == 100)]
+                data_surface = data[data['land_fraction'] == 100]
             elif surface == 'ocean':
-                data_surface = data[(data['xco2_quality_flag_ML'] == qf) & (data['land_fraction'] == 0)]
-            
+                data_surface = data[data['land_fraction'] == 0]
+
             n_surface = len(data_surface)
-            fraction_surface = n_surface / n_total if n_total > 0 else 0
-            
-            f.write('Number of data points: ' + str(n_surface) + '\n')
-            f.write('Fraction of total data: ' + str(fraction_surface) + '\n')
-            
-            if n_surface == 0:
-                f.write('No data available for this surface type and quality flag.\n')
-                continue
-            
-            # Calculate SA bias statistics for this surface
-            surface_mask = data['xco2_quality_flag_ML'] == qf
-            if surface == 'land':
-                surface_mask = surface_mask & (data['land_fraction'] == 100)
-            elif surface == 'ocean':
-                surface_mask = surface_mask & (data['land_fraction'] == 0)
-            
-            xco2_SA_bias_mean = np.nanmean(SA_bias[surface_mask])
-            xco2b112_SA_bias_mean = np.nanmean(SA_bias_b112[surface_mask])
-            xco2_SA_bias_std = np.nanstd(SA_bias[surface_mask])
-            xco2b112_SA_bias_std = np.nanstd(SA_bias_b112[surface_mask])
-            
-            f.write('xco2_ML_SA_bias_mean: ' + str(xco2b112_SA_bias_mean) + '\n')
-            f.write('xco2_SA_bias_mean: ' + str(xco2_SA_bias_mean) + '\n')
-            f.write('xco2_ML_SA_bias_std: ' + str(xco2b112_SA_bias_std) + '\n')
-            f.write('xco2_SA_bias_std: ' + str(xco2_SA_bias_std) + '\n')
-            
-            # TCCON validation statistics for this surface
-            data_tccon = data_surface[data_surface['xco2tccon'] > 0]  # Only soundings with TCCON matches
-            
-            if len(data_tccon) > 0:
-                # Calculate differences
-                diff_ML = data_tccon['xco2_ML'] - data_tccon['xco2tccon']
-                diff_B112 = data_tccon['xco2'] - data_tccon['xco2tccon']
-                diff_raw = data_tccon['xco2_raw'] - data_tccon['xco2tccon']
+
+            for qf in [0, 1, 2]:
+                f.write('Quality Flag: ' + str(qf) + '\n')
+                f.write('=' * 50 + '\n')
+
+                # filter data based on quality flag
+                data_surface = data_surface[data_surface[qf_version] == qf]
                 
-                # Calculate RMSE
-                rmse_ML = np.sqrt(np.nanmean(diff_ML**2))
-                rmse_B112 = np.sqrt(np.nanmean(diff_B112**2))
-                rmse_raw = np.sqrt(np.nanmean(diff_raw**2))
+                n_surface_qf = len(data_surface)
+
+                fraction_surface = n_surface_qf / n_surface if n_surface > 0 else 0
+                fraction_total = n_surface_qf / n_total if n_total > 0 else 0
                 
-                # Calculate std and median
-                std_ML = np.nanstd(diff_ML)
-                std_B112 = np.nanstd(diff_B112)
-                std_raw = np.nanstd(diff_raw)
+                f.write('Number of data points: ' + str(n_surface_qf) + '\n')
+                f.write('Fraction of total data: ' + str(fraction_total) + '\n')
+                f.write('Fraction of data per surface type: ' + str(fraction_surface) + '\n')
+                f.write('=' * 50 + '\n')
+                    
+                # TCCON validation statistics for this surface
+                data_tccon = data_surface[data_surface['xco2tccon'] > 0]  # Only soundings with TCCON matches
                 
-                median_ML = np.nanmedian(diff_ML)
-                median_B112 = np.nanmedian(diff_B112)
-                median_raw = np.nanmedian(diff_raw)
-                
-                n_tccon = len(data_tccon)
-                
-                f.write('\nTCCON Validation:\n')
-                f.write('Number of TCCON matches: ' + str(n_tccon) + '\n')
-                f.write('xco2_ML_TCCON_RMSE: ' + str(rmse_ML) + '\n')
-                f.write('xco2_B112_TCCON_RMSE: ' + str(rmse_B112) + '\n')
-                f.write('xco2_raw_TCCON_RMSE: ' + str(rmse_raw) + '\n')
-                f.write('xco2_ML_TCCON_std: ' + str(std_ML) + '\n')
-                f.write('xco2_B112_TCCON_std: ' + str(std_B112) + '\n')
-                f.write('xco2_raw_TCCON_std: ' + str(std_raw) + '\n')
-                f.write('xco2_ML_TCCON_median: ' + str(median_ML) + '\n')
-                f.write('xco2_B112_TCCON_median: ' + str(median_B112) + '\n')
-                f.write('xco2_raw_TCCON_median: ' + str(median_raw) + '\n')
-            else:
-                f.write('\nTCCON Validation:\n')
-                f.write('No TCCON matches found for this surface type.\n')
+                if len(data_tccon) > 0:
+                    if qf_version == 'xco2_quality_flag_ML':
+                    # Calculate differences
+                        diff = data_tccon['xco2_ML'] - data_tccon['xco2tccon']
+                    else:
+                        diff = data_tccon['xco2'] - data_tccon['xco2tccon']
+                        diff_raw = data_tccon['xco2_raw'] - data_tccon['xco2tccon']
+                        
+                        rmse_raw = np.sqrt(np.nanmean(diff_raw**2))
+                        std_raw = np.nanstd(diff_raw)
+                        median_raw = np.nanmedian(diff_raw)
+                    
+                    # Calculate RMSE
+                    rmse = np.sqrt(np.nanmean(diff**2))
+                    # Calculate std and median
+                    std = np.nanstd(diff)
+                    median = np.nanmedian(diff)
+                    
+                    n_tccon = len(data_tccon)
+                    
+                    f.write('\nTCCON Validation:\n')
+                    f.write('Number of TCCON matches: ' + str(n_tccon) + '\n')
+                    if qf_version == 'xco2_quality_flag_ML':
+                        f.write('xco2_ML_TCCON_RMSE: ' + str(rmse) + '\n')
+                        f.write('xco2_ML_TCCON_std: ' + str(std) + '\n')
+                        f.write('xco2_ML_TCCON_median: ' + str(median) + '\n')
+                    else:
+                        f.write('xco2_TCCON_RMSE: ' + str(rmse) + '\n')
+                        f.write('xco2_TCCON_std: ' + str(std) + '\n')
+                        f.write('xco2_TCCON_median: ' + str(median) + '\n')
+                        f.write('xco2_TCCON_RMSE_raw: ' + str(rmse_raw) + '\n')
+                        f.write('xco2_TCCON_std_raw: ' + str(std_raw) + '\n')
+                        f.write('xco2_TCCON_median_raw: ' + str(median_raw) + '\n')
+                else:
+                    f.write('\nTCCON Validation:\n')
+                    f.write('No TCCON matches found for this surface type.\n')
         
         f.write('\n' + '=' * 50 + '\n\n')
 
