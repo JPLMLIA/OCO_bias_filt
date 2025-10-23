@@ -184,8 +184,8 @@ def match_tccon_to_soundings(data, tccon_data):
     return data
 
 
-year = 2022
-frac = 1 # fraction of data to load
+year = 2019
+frac = 0.1 # fraction of data to load
 name_all = 'LiteFileExport_' + str(year) + '_'
 save_fig = True
 Lite_file_path = '/Volumes/OCO/LiteFiles/export/B11.2_ML/'
@@ -428,6 +428,10 @@ data_all = data.copy()
 for qf in [0, 1, 2]:
     data = data_all.loc[data_all['xco2_quality_flag_ML'] == qf]
     name = name_all + 'QF' + str(qf)
+    # Skip plotting if no data for this quality flag
+    if len(data) == 0:
+        print(f'No data for quality flag {qf}, skipping plots')
+        continue
     plot_map(data, ['ML-Raw', 'ML-B11', 'B11-Raw'], save_fig=save_fig, path=save_path, name=name, pos_neg_IO=True, min=-1,max=1)
     plot_map(data, ['bias_correction_uncert_ML'], save_fig=save_fig, path=save_path, name=name, pos_neg_IO=False)
 

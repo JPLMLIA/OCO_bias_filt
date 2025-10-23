@@ -729,6 +729,26 @@ def raster_data(Var, Lat, Lon, res=1, aggregate='mean'):
     return world_map
 
 
+def clean_raster_data(raster):
+    """
+    Clean raster data by removing NaN and infinite values
+    
+    :param raster: Input raster data (numpy array or similar)
+    :return: Cleaned raster data with NaN and inf values replaced
+    """
+    raster_array = np.array(raster)
+    
+    # Replace infinite values with NaN
+    raster_array[np.isinf(raster_array)] = np.nan
+    
+    # Check if we have any valid data
+    if not np.isfinite(raster_array).any():
+        print("Warning: All values in raster are NaN or infinite")
+        return None
+    
+    return raster_array
+
+
 def Earth_Map_Raster(raster, MIN, MAX, var_name, Title, Save=False, Save_Name: str = 'None', res=1,colormap=plt.cm.coolwarm,
                     extend = 'both'):
     ''' makes beautiful plot of data organized in a matrix representing lat lon of the globe
@@ -754,15 +774,59 @@ def Earth_Map_Raster(raster, MIN, MAX, var_name, Title, Save=False, Save_Name: s
     gl = ax.gridlines(draw_labels=True)
     gl.top_labels = False
     gl.right_labels = False
-    # Handle NaN values by creating a masked array
-    raster_masked = np.ma.masked_invalid(np.flipud(raster))
+    # Clean the raster data first
+    raster_clean = clean_raster_data(raster)
+    if raster_clean is None:
+        print("Warning: No valid data in raster, skipping plot")
+        return
+    
+    # Create masked array for invalid values
+    raster_masked = np.ma.masked_invalid(np.flipud(raster_clean))
+    
+    # Additional check: ensure we have some valid data
+    if raster_masked.count() == 0:
+        print("Warning: No valid data points in raster after masking")
+        return
+    
+    # Final check: ensure the masked array doesn't contain any problematic values
+    # that could cause issues with cartopy's coordinate transformation
+    if hasattr(raster_masked, 'data'):
+        # Check if the underlying data contains any problematic values
+        data_check = raster_masked.data
+        if np.any(np.isinf(data_check)) or np.any(np.isnan(data_check)):
+            # Replace any remaining problematic values with NaN
+            data_check = np.where(np.isfinite(data_check), data_check, np.nan)
+            raster_masked = np.ma.masked_invalid(data_check)
+    
+    # Ensure all coordinate values are finite for cartopy
+    # This is critical for cartopy's coordinate transformation
+    if not np.all(np.isfinite(limits)):
+        print("Warning: Invalid coordinate limits detected, using default values")
+        limits = [-180, 180, -90, 90]
+    
+    # Ensure the extent array is finite
+    extent_array = np.array(limits) + offset
+    if not np.all(np.isfinite(extent_array)):
+        print("Warning: Invalid extent array detected, using default values")
+        extent_array = np.array([-180, 180, -90, 90]) + offset
     
     # Handle NaN values by setting a specific color for them
     colormap.set_bad('white', alpha=0)  # Set NaN values to transparent white
     
-    im = ax.imshow(raster_masked, interpolation='nearest', origin='lower',
-                   extent=np.array(limits)+offset, cmap=colormap, vmin=MIN, vmax=MAX,
-                   transform=ccrs.PlateCarree(), alpha=0.9)
+    try:
+        im = ax.imshow(raster_masked, interpolation='nearest', origin='lower',
+                       extent=extent_array, cmap=colormap, vmin=MIN, vmax=MAX,
+                       transform=ccrs.PlateCarree(), alpha=0.9)
+    except ValueError as e:
+        if "must be finite" in str(e):
+            print(f"Warning: Cartopy coordinate transformation failed due to non-finite values. Using fallback method.")
+            # Fallback: use a simple imshow without cartopy transformation
+            # Create a simple extent without coordinate transformation
+            simple_extent = [-180, 180, -90, 90]
+            im = ax.imshow(raster_masked, interpolation='nearest', origin='lower',
+                           extent=simple_extent, cmap=colormap, vmin=MIN, vmax=MAX, alpha=0.9)
+        else:
+            raise e
 
     ax.set_title(Title, fontsize=15, pad=10)
     plt.colorbar(im, fraction=0.066, pad=0.08, extend=extend, location='bottom', label=var_name)
@@ -919,7 +983,34 @@ def plot_map(data, vars, save_fig=False, path: Path = None, name: str = 'None', 
         vars = [vars]
 
     for var in vars:
-        raster = raster_data(data[var].to_numpy(), data['latitude'].to_numpy(), data['longitude'].to_numpy(), res=res, aggregate=aggregate)
+        # Check if the variable exists in the data
+        if var not in data.columns:
+            print(f"Warning: Variable '{var}' not found in data, skipping...")
+            continue
+            
+        # Get the data for this variable
+        var_data = data[var].to_numpy()
+        lat_data = data['latitude'].to_numpy()
+        lon_data = data['longitude'].to_numpy()
+        
+        # Check for valid data
+        if len(var_data) == 0 or len(lat_data) == 0 or len(lon_data) == 0:
+            print(f"Warning: No data available for variable '{var}', skipping...")
+            continue
+            
+        # Check for NaN or infinite values in coordinates
+        if np.any(np.isnan(lat_data)) or np.any(np.isnan(lon_data)) or np.any(np.isinf(lat_data)) or np.any(np.isinf(lon_data)):
+            print(f"Warning: Invalid coordinates found for variable '{var}', cleaning data...")
+            # Remove rows with invalid coordinates
+            valid_mask = np.isfinite(lat_data) & np.isfinite(lon_data)
+            if not np.any(valid_mask):
+                print(f"Warning: No valid coordinates for variable '{var}', skipping...")
+                continue
+            var_data = var_data[valid_mask]
+            lat_data = lat_data[valid_mask]
+            lon_data = lon_data[valid_mask]
+        
+        raster = raster_data(var_data, lat_data, lon_data, res=res, aggregate=aggregate)
         if pos_neg_IO:
             if max == None:
                 MAX = np.abs(np.nanpercentile(raster, 95))

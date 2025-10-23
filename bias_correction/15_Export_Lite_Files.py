@@ -139,15 +139,6 @@ if COPY_LITE_FILES:
         os.system(f'cp "{l}" "{EXPORT_LITE_PATH / l_name}"')
 
 
-# Use if glob returns empty list unexpectedly and directory is correct. Performs similar function to glob.
-# load the files in LITE_PATH without using glob
-# lite_files = []
-# for file in os.listdir(LITE_PATH):
-#     if file.endswith(".nc4"):
-#         lite_files.append(os.path.join(LITE_PATH, file))
-
-# print(lite_files)
-
 
 # itterate over all lite files
 for j in tqdm(range(len(lite_files))):
