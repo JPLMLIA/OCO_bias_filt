@@ -45,7 +45,7 @@ ABSTENTION_THRESHOLD_LND = 1.3
 ABSTENTION_THRESHOLD_OCN = 1.05
 
 # Lite file name identifier (e.g. B11100Ar)
-LITE_FILE_ID = 'B11210Ar'
+LITE_FILE_ID = 'B11211Ar'
 # new Lite file name identifier after models are applied (e.g. B11Gamma)
 New_LITE_FILE_ID = 'B112v2ML'
 
