@@ -7,7 +7,7 @@ from tqdm import tqdm
 # Folder containing the Lite Files
 INPUT_FOLDER = '/Volumes/OCO/LiteFiles/B11.2_ML'
 # Path for the output combined file
-OUTPUT_FILE = '/Volumes/OCO/LiteFiles/SuperLite/B11.2_ML_SuperLite.nc4'
+OUTPUT_FILE = '/Volumes/OCO/LiteFiles/B11.2_ML/SuperLite_B11.2_ML.nc4'
 
 # List of variables to keep (all other variables will be discarded)
 KEEP_VARIABLES = [
@@ -122,7 +122,7 @@ def write_combined_netcdf(output_file, combined_data, source_file):
 
 def main():
 
-    for year in range(2014, 2025):
+    for year in range(2014, 2026):
         year = str(year)
 
         # Find all netCDF Lite Files in the input folder
